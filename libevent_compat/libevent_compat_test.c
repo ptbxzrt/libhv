@@ -31,6 +31,11 @@ void read_callback(evutil_socket_t fd, short event, void *arg) {
 }
 
 void accept_callback(evutil_socket_t listener, short event, void *arg) {
+    if (event == EV_TIMEOUT) {
+        printf("timeout\n");
+        return;
+    }
+
     struct event_base *base = (struct event_base *)arg;
 
     struct sockaddr_storage client_address;
@@ -39,6 +44,10 @@ void accept_callback(evutil_socket_t listener, short event, void *arg) {
 
     struct event *client_event = event_new(base, client_socket, EV_READ | EV_PERSIST, read_callback, NULL);
     event_add(client_event, NULL);
+}
+
+void active_callback(evutil_socket_t listener, short event, void *arg) {
+    printf("active_callback: %d\n", event);
 }
 
 int main() {
@@ -54,12 +63,23 @@ int main() {
     bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address));
     listen(server_socket, 10);
 
-    struct event *listener_event = event_new(base, server_socket, EV_READ | EV_PERSIST, accept_callback, base);
+    struct event *listener_event = event_new(base, server_socket, EV_READ, accept_callback, base);
+
+    struct event *active_event = event_new(base, server_socket, EV_READ | EV_PERSIST, active_callback, base);
+
     event_add(listener_event, NULL);
+
+    event_active(active_event, EV_READ | EV_WRITE, 0);
+
+    struct timeval tv;
+    tv.tv_sec = 3;
+    tv.tv_usec = 0;
+    event_base_loopexit(base, &tv);
 
     event_base_dispatch(base);
 
     event_free(listener_event);
+    event_free(active_event);
     event_base_free(base);
 
     return 0;
